@@ -4,9 +4,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using JetBrains.Annotations;
 using McMaster.Extensions.CommandLineUtils;
+using Newtonsoft.Json;
 using osu.Game.Beatmaps;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
@@ -45,6 +47,9 @@ namespace PerformanceCalculator.Simulate
         [UsedImplicitly]
         public virtual int? Goods { get; }
 
+        [Option(CommandOptionType.NoValue, Template = "-j|--json", Description = "Optional. Output data in json format")]
+        public bool? Json { get; }
+
         public override void Execute()
         {
             var ruleset = Ruleset;
@@ -73,18 +78,38 @@ namespace PerformanceCalculator.Simulate
             var categoryAttribs = new Dictionary<string, double>();
             double pp = ruleset.CreatePerformanceCalculator(workingBeatmap, scoreInfo).Calculate(categoryAttribs);
 
-            Console.WriteLine(workingBeatmap.BeatmapInfo.ToString());
+            if (!Json ?? true)
+            {
+                Console.WriteLine(workingBeatmap.BeatmapInfo.ToString());
 
-            WritePlayInfo(scoreInfo, beatmap);
+                WritePlayInfo(scoreInfo, beatmap);
+            }
 
-            WriteAttribute("Mods", mods.Length > 0
+            var attributes = new Dictionary<string, string>();
+
+            attributes.Add("Mods", mods.Length > 0
                 ? mods.Select(m => m.Acronym).Aggregate((c, n) => $"{c}, {n}")
                 : "None");
 
             foreach (var kvp in categoryAttribs)
-                WriteAttribute(kvp.Key, kvp.Value.ToString(CultureInfo.InvariantCulture));
+                attributes.Add(kvp.Key, kvp.Value.ToString(CultureInfo.InvariantCulture));
 
-            WriteAttribute("pp", pp.ToString(CultureInfo.InvariantCulture));
+            attributes.Add("pp", pp.ToString(CultureInfo.InvariantCulture));
+
+            if (Json ?? false)
+            {
+                var json = new
+                {
+                    BeatmapInfo = workingBeatmap.BeatmapInfo.ToString(),
+                    Attributes = attributes
+                };
+                Console.WriteLine(JsonConvert.SerializeObject(json));
+            }
+            else
+            {
+                foreach (var attr in attributes)
+                    WriteAttribute(attr.Key, attr.Value);
+            }
         }
 
         private List<Mod> getMods(Ruleset ruleset)

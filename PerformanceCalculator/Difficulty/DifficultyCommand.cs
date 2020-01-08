@@ -9,6 +9,7 @@ using System.Linq;
 using Alba.CsConsoleFormat;
 using JetBrains.Annotations;
 using McMaster.Extensions.CommandLineUtils;
+using Newtonsoft.Json;
 using osu.Game.Beatmaps;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Catch.Difficulty;
@@ -38,6 +39,9 @@ namespace PerformanceCalculator.Difficulty
                                                                                           + "Values: hr, dt, hd, fl, ez, 4k, 5k, etc...")]
         public string[] Mods { get; }
 
+        [Option(CommandOptionType.NoValue, Template = "-j|--json", Description = "Optional. Output data in json format")]
+        public bool? Json { get; }
+
         public override void Execute()
         {
             var results = new List<Result>();
@@ -53,38 +57,55 @@ namespace PerformanceCalculator.Difficulty
             else
                 results.Add(processBeatmap(new ProcessorWorkingBeatmap(Path)));
 
-            var document = new Document();
-
-            foreach (var group in results.GroupBy(r => r.RulesetId))
+            if (Json ?? false)
             {
-                var ruleset = LegacyHelper.GetRulesetFromLegacyID(group.First().RulesetId);
-
-                document.Children.Add(new Span($"Ruleset: {ruleset.ShortName}"), "\n");
-
-                var grid = new Grid();
-
-                grid.Columns.Add(GridLength.Auto, GridLength.Auto);
-                grid.Children.Add(new Cell("beatmap"), new Cell("star rating"));
-
-                foreach (var attribute in group.First().AttributeData)
+                foreach (var result in results)
                 {
-                    grid.Columns.Add(GridLength.Auto);
-                    grid.Children.Add(new Cell(attribute.name));
+                    var json = new
+                    {
+                        BeatmapInfo = result.Beatmap,
+                        Attributes = result.AttributeData,
+                        Stars = result.Stars,
+                        Ruleset = result.RulesetId
+                    };
+                    Console.WriteLine(JsonConvert.SerializeObject(json));
                 }
-
-                foreach (var result in group)
-                {
-                    grid.Children.Add(new Cell(result.Beatmap), new Cell(result.Stars) { Align = Align.Right });
-                    foreach (var attribute in result.AttributeData)
-                        grid.Children.Add(new Cell(attribute.value) { Align = Align.Right });
-                }
-
-                document.Children.Add(grid);
-
-                document.Children.Add("\n");
             }
+            else
+            {
+                var document = new Document();
 
-            OutputDocument(document);
+                foreach (var group in results.GroupBy(r => r.RulesetId))
+                {
+                    var ruleset = LegacyHelper.GetRulesetFromLegacyID(group.First().RulesetId);
+
+                    document.Children.Add(new Span($"Ruleset: {ruleset.ShortName}"), "\n");
+
+                    var grid = new Grid();
+
+                    grid.Columns.Add(GridLength.Auto, GridLength.Auto);
+                    grid.Children.Add(new Cell("beatmap"), new Cell("star rating"));
+
+                    foreach (var attribute in group.First().AttributeData)
+                    {
+                        grid.Columns.Add(GridLength.Auto);
+                        grid.Children.Add(new Cell(attribute.name));
+                    }
+
+                    foreach (var result in group)
+                    {
+                        grid.Children.Add(new Cell(result.Beatmap), new Cell(result.Stars) { Align = Align.Right });
+                        foreach (var attribute in result.AttributeData)
+                            grid.Children.Add(new Cell(attribute.value) { Align = Align.Right });
+                    }
+
+                    document.Children.Add(grid);
+
+                    document.Children.Add("\n");
+                }
+
+                OutputDocument(document);
+            }
         }
 
         private Result processBeatmap(WorkingBeatmap beatmap)
