@@ -7,8 +7,11 @@
             "request": "launch",
             "program": "dotnet",
             "args": [
-                "${workspaceRoot}/PerformanceCalculator/bin/Debug/net5.0/PerformanceCalculator.dll",
-                "place-your-arguments-here (launch.json)"
+                "${workspaceRoot}/PerformanceCalculator/bin/Debug/net6.0/PerformanceCalculator.dll",
+                "difficulty",
+                "-nc",
+                "-j",
+                "rog.osu",
             ],
             "cwd": "${workspaceRoot}",
             "preLaunchTask": "Build (Debug)",

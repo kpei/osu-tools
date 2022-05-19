@@ -16,6 +16,7 @@ using osu.Game.Online.API;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Difficulty;
 using osu.Game.Rulesets.Mods;
+using PerformanceCalculator.Difficulty.ExtendedSkills;
 
 namespace PerformanceCalculator.Difficulty
 {
@@ -131,15 +132,22 @@ namespace PerformanceCalculator.Difficulty
             // Get the ruleset
             var ruleset = LegacyHelper.GetRulesetFromLegacyID(Ruleset ?? beatmap.BeatmapInfo.Ruleset.OnlineID);
             var mods = NoClassicMod ? getMods(ruleset) : LegacyHelper.ConvertToLegacyDifficultyAdjustmentMods(ruleset, getMods(ruleset));
-            var attributes = ruleset.CreateDifficultyCalculator(beatmap).Calculate(mods);
-
+            var difficultyCalculator = RulesetHelper.GetExtendedDifficultyCalculator(ruleset.RulesetInfo, beatmap);
+            var attributes = difficultyCalculator.Calculate(mods);
+            var skills = ((IExtendedDifficultyCalculator)difficultyCalculator).GetSkills();
+            var objectsWithStrain = new Dictionary<string, ObjectWithStrain[]>();
+            foreach(var skill in skills) {
+                objectsWithStrain.Add(skill.ToString(), ((IExtendedSkill)skill).GetObjectsWithStrain());
+            }
+            
             return new Result
             {
                 RulesetId = ruleset.RulesetInfo.OnlineID,
                 BeatmapId = beatmap.BeatmapInfo.OnlineID,
                 Beatmap = beatmap.BeatmapInfo.ToString(),
                 Mods = mods.Select(m => new APIMod(m)).ToList(),
-                Attributes = attributes
+                Attributes = attributes,
+                objectsWithStrain = objectsWithStrain,
             };
         }
 
@@ -188,6 +196,9 @@ namespace PerformanceCalculator.Difficulty
 
             [JsonProperty("attributes")]
             public DifficultyAttributes Attributes { get; set; }
+
+            [JsonProperty("objects_with_strain")]
+            public Dictionary<string, ObjectWithStrain[]> objectsWithStrain { get; set; }
         }
     }
 }

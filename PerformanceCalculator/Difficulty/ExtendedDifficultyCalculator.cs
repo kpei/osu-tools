@@ -12,13 +12,26 @@ using osu.Game.Rulesets.Mania.Difficulty;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Osu.Difficulty;
 using osu.Game.Rulesets.Taiko.Difficulty;
+using osu.Game.Rulesets.Osu.Difficulty.Skills;
+using osu.Game.Rulesets.Osu.Scoring;
+using osu.Game.Rulesets.Scoring;
+using PerformanceCalculator.Difficulty.ExtendedSkills;
 
-namespace PerformanceCalculatorGUI
+namespace PerformanceCalculator.Difficulty
 {
     public interface IExtendedDifficultyCalculator
     {
         Skill[] GetSkills();
         DifficultyHitObject[] GetDifficultyHitObjects(IBeatmap beatmap, double clockRate);
+    }
+
+    public class SkillWithStrains {
+        public Skill skill;
+        public double[] strains;
+
+        public SkillWithStrains(Skill skill, double[] strains) {
+
+        }
     }
 
     public class ExtendedOsuDifficultyCalculator : OsuDifficultyCalculator, IExtendedDifficultyCalculator
@@ -30,12 +43,29 @@ namespace PerformanceCalculatorGUI
         }
 
         public Skill[] GetSkills() => skills;
-        public DifficultyHitObject[] GetDifficultyHitObjects(IBeatmap beatmap, double clockRate) => CreateDifficultyHitObjects(beatmap, clockRate).ToArray();
+        public DifficultyHitObject[] GetDifficultyHitObjects(IBeatmap beatmap, double clockRate) => CreateDifficultyHitObjects(Beatmap, clockRate).ToArray();
 
         protected override DifficultyAttributes CreateDifficultyAttributes(IBeatmap beatmap, Mod[] mods, Skill[] skills, double clockRate)
         {
             this.skills = skills;
             return base.CreateDifficultyAttributes(beatmap, mods, skills, clockRate);
+        }
+
+        protected override Skill[] CreateSkills(IBeatmap beatmap, Mod[] mods, double clockRate)
+        {
+            base.CreateSkills(beatmap, mods, clockRate);
+            HitWindows hitWindows = new OsuHitWindows();
+            hitWindows.SetDifficulty(beatmap.Difficulty.OverallDifficulty);
+
+            var hitWindowGreat = hitWindows.WindowFor(HitResult.Great) / clockRate;
+
+            return new Skill[]
+            {
+                new ExtendedAim(mods, true),
+                new ExtendedAim(mods, false),
+                new ExtendedSpeed(mods, hitWindowGreat),
+                new ExtendedFlashlight(mods)
+            };
         }
     }
 

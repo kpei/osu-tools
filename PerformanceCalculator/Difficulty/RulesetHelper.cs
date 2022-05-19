@@ -21,7 +21,7 @@ using osu.Game.Rulesets.Taiko.Objects;
 using osu.Game.Skinning;
 using osu.Game.Utils;
 
-namespace PerformanceCalculatorGUI
+namespace PerformanceCalculator.Difficulty
 {
     public static class RulesetHelper
     {
