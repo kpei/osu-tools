@@ -5,7 +5,6 @@
 
 PROJECTS=(
     "PerformanceCalculator/PerformanceCalculator.csproj"
-    "PerformanceCalculatorGUI/PerformanceCalculatorGUI.csproj"
 )
 
 SLN="osu.Tools.sln"
