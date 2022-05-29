@@ -469,7 +469,13 @@ namespace PerformanceCalculatorGUI.Screens
             });
 
             if (RuntimeInfo.IsDesktop)
-                HotReloadCallbackReceiver.CompilationFinished += _ => Schedule(calculateDifficulty);
+            {
+                HotReloadCallbackReceiver.CompilationFinished += _ => Schedule(() =>
+                {
+                    calculateDifficulty();
+                    calculatePerformance();
+                });
+            }
         }
 
         protected override void Dispose(bool isDisposing)
@@ -598,7 +604,13 @@ namespace PerformanceCalculatorGUI.Screens
             }
 
             if (difficultyCalculator.Value is IExtendedDifficultyCalculator extendedDifficultyCalculator)
+            {
+                // StrainSkill always skips the first object
+                if (working.Beatmap?.HitObjects?.Count > 1)
+                    strainVisualizer.TimeUntilFirstStrain.Value = (int)working.Beatmap.HitObjects[1].StartTime;
+
                 strainVisualizer.Skills.Value = extendedDifficultyCalculator.GetSkills();
+            }
             else
                 strainVisualizer.Skills.Value = Array.Empty<Skill>();
         }
@@ -777,7 +789,7 @@ namespace PerformanceCalculatorGUI.Screens
             // This is a hack around TextBox's way of updating layout and positioning of text
             // It can only be triggered by a couple of input events and there's no way to invalidate it from the outside
             // See: https://github.com/ppy/osu-framework/blob/fd5615732033c5ea650aa5cabc8595883a2b63f5/osu.Framework/Graphics/UserInterface/TextBox.cs#L528
-            textbox.TriggerEvent(new FocusEvent(new InputState()));
+            textbox.TriggerEvent(new FocusEvent(new InputState(), this));
         }
 
         private void resetMods()
@@ -809,6 +821,9 @@ namespace PerformanceCalculatorGUI.Screens
 
         private void updateCombo(bool reset)
         {
+            if (difficultyAttributes is null)
+                return;
+
             missesTextBox.MaxValue = difficultyAttributes.MaxCombo;
 
             comboTextBox.PlaceholderText = difficultyAttributes.MaxCombo.ToString();
