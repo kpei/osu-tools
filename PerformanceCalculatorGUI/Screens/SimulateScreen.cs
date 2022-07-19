@@ -380,7 +380,7 @@ namespace PerformanceCalculatorGUI.Screens
                                                     Margin = new MarginPadding(10.0f),
                                                     Origin = Anchor.TopLeft,
                                                     Height = 20,
-                                                    Text = "Strain graph"
+                                                    Text = "Strain graph (alt+scroll to zoom)"
                                                 },
                                                 new Container
                                                 {
@@ -694,6 +694,11 @@ namespace PerformanceCalculatorGUI.Screens
             }
             else if (ruleset.Value.ShortName == "mania")
             {
+                updateAccuracyParams(fullScoreDataSwitch.Current.Value);
+                accuracyContainer.Show();
+
+                missesTextBox.Show();
+
                 scoreTextBox.Text = string.Empty;
                 scoreTextBox.Show();
             }
