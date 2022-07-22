@@ -14,31 +14,33 @@ using osu.Game.Graphics.Sprites;
 using osu.Game.Online.API.Requests.Responses;
 using osuTK;
 using osu.Game.Users;
+using osu.Game.Users.Drawables;
+using PerformanceCalculatorGUI.Components.TextBoxes;
 
 namespace PerformanceCalculatorGUI.Components
 {
-    public struct UserPPListPanelData
+    public struct UserCardData
     {
         public decimal LivePP { get; set; }
         public decimal LocalPP { get; set; }
         public decimal PlaycountPP { get; set; }
     }
 
-    public class UserPPListPanel : UserListPanel
+    public class UserCard : UserListPanel
     {
         private OsuSpriteText liveLabel;
         private OsuSpriteText localLabel;
         private OsuSpriteText differenceLabel;
         private OsuSpriteText playcountLabel;
 
-        public Bindable<UserPPListPanelData> Data = new();
+        public Bindable<UserCardData> Data = new();
 
-        public UserPPListPanel(APIUser user)
+        public UserCard(APIUser user)
             : base(user)
         {
             RelativeSizeAxes = Axes.X;
             Height = 40;
-            CornerRadius = 6;
+            CornerRadius = ExtendedLabelledTextBox.CORNER_RADIUS;
         }
 
         [BackgroundDependencyLoader]
@@ -47,12 +49,12 @@ namespace PerformanceCalculatorGUI.Components
             Background.Width = 0.5f;
             Background.Origin = Anchor.CentreRight;
             Background.Anchor = Anchor.CentreRight;
-            Background.Colour = ColourInfo.GradientHorizontal(Color4.White.Opacity(1), Color4.White.Opacity(0.3f));
+            Background.Colour = ColourInfo.GradientHorizontal(Color4.White.Opacity(1), Color4.White.Opacity(0.5f));
 
             Data.ValueChanged += val =>
             {
-                liveLabel.Text = $"live pp: {val.NewValue.LivePP:N1}";
-                localLabel.Text = $"local pp: {val.NewValue.LocalPP:N1}";
+                liveLabel.Text = $"Live: {val.NewValue.LivePP:N1} pp";
+                localLabel.Text = $"New: {val.NewValue.LocalPP:N1} pp";
                 differenceLabel.Text = $"{val.NewValue.LocalPP - val.NewValue.LivePP:+0.0;-0.0;-}";
                 playcountLabel.Text = $"{val.NewValue.PlaycountPP:N1} from playcount";
             };
@@ -82,12 +84,14 @@ namespace PerformanceCalculatorGUI.Components
                         Spacing = new Vector2(10, 0),
                         Children = new Drawable[]
                         {
-                            CreateAvatar().With(avatar =>
+                            new UpdateableAvatar(User, false)
                             {
-                                avatar.Anchor = Anchor.CentreLeft;
-                                avatar.Origin = Anchor.CentreLeft;
-                                avatar.Size = new Vector2(40);
-                            }),
+                                Masking = true,
+                                Anchor = Anchor.CentreLeft,
+                                Origin = Anchor.CentreLeft,
+                                CornerRadius = ExtendedLabelledTextBox.CORNER_RADIUS,
+                                Size = new Vector2(40)
+                            },
                             CreateFlag().With(flag =>
                             {
                                 flag.Anchor = Anchor.CentreLeft;
@@ -107,21 +111,31 @@ namespace PerformanceCalculatorGUI.Components
                         AutoSizeAxes = Axes.Both,
                         Direction = FillDirection.Horizontal,
                         Padding = new MarginPadding { Right = 10 },
+                        Spacing = new Vector2(20.0f),
                         Children = new Drawable[]
                         {
-                            liveLabel = new OsuSpriteText
+                            new FillFlowContainer
                             {
-                                Colour = Colours.RedLighter,
-                                Anchor = Anchor.CentreLeft,
+                                AutoSizeAxes = Axes.Both,
+                                Direction = FillDirection.Vertical,
                                 Origin = Anchor.CentreLeft,
-                                Width = 115
-                            },
-                            localLabel = new OsuSpriteText
-                            {
-                                Colour = Colours.BlueLighter,
                                 Anchor = Anchor.CentreLeft,
-                                Origin = Anchor.CentreLeft,
-                                Width = 120
+                                Children = new[]
+                                {
+                                    localLabel = new OsuSpriteText
+                                    {
+                                        Colour = Colours.RedLighter,
+                                        Anchor = Anchor.CentreRight,
+                                        Origin = Anchor.CentreRight,
+                                        Font = OsuFont.GetFont(size: 14, weight: FontWeight.Bold),
+                                    },
+                                    liveLabel = new OsuSpriteText
+                                    {
+                                        Anchor = Anchor.CentreRight,
+                                        Origin = Anchor.CentreRight,
+                                        Font = OsuFont.GetFont(size: 14)
+                                    }
+                                }
                             },
                             new FillFlowContainer
                             {

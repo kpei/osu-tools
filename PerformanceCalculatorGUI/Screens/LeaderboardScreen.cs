@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
@@ -18,8 +19,8 @@ using osu.Game.Overlays;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Users;
-using osuTK;
 using PerformanceCalculatorGUI.Components;
+using PerformanceCalculatorGUI.Components.TextBoxes;
 using PerformanceCalculatorGUI.Configuration;
 
 namespace PerformanceCalculatorGUI.Screens
@@ -34,7 +35,7 @@ namespace PerformanceCalculatorGUI.Screens
         private StatefulButton calculationButton;
         private VerboseLoadingLayer loadingLayer;
 
-        private FillFlowContainer leaderboardContainer;
+        private OsuScrollContainer leaderboardContainer;
 
         private CancellationTokenSource calculationCancellatonToken;
 
@@ -128,17 +129,9 @@ namespace PerformanceCalculatorGUI.Screens
                         },
                         new Drawable[]
                         {
-                            new OsuScrollContainer
+                            leaderboardContainer = new OsuScrollContainer
                             {
-                                RelativeSizeAxes = Axes.Both,
-                                Child = leaderboardContainer = new FillFlowContainer
-                                {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                    Direction = FillDirection.Vertical,
-                                    Spacing = new Vector2(5),
-                                    Padding = new MarginPadding(15)
-                                }
+                                RelativeSizeAxes = Axes.Both
                             }
                         },
                     }
@@ -178,7 +171,7 @@ namespace PerformanceCalculatorGUI.Screens
 
                 var leaderboard = await apiManager.GetJsonFromApi<GetTopUsersResponse>($"rankings/{ruleset.Value.ShortName}/performance?cursor[page]={pageTextBox.Value.Value - 1}");
 
-                var calculatedPlayers = new List<(string, decimal, decimal)>();
+                var calculatedPlayers = new List<LeaderboardUser>();
 
                 for (int i = 0; i < playerAmountTextBox.Value.Value; i++)
                 {
@@ -191,26 +184,20 @@ namespace PerformanceCalculatorGUI.Screens
 
                     var playerData = await calculatePlayer(player, token);
 
-                    calculatedPlayers.Add((player.User.Username, playerData.LocalPP, playerData.LivePP));
-
-                    Schedule(() =>
+                    calculatedPlayers.Add(new LeaderboardUser
                     {
-                        var playerPanel = new UserPPListPanel(player.User);
-                        leaderboardContainer.Add(playerPanel);
-
-                        playerPanel.Data.Value = playerData;
+                        User = player.User,
+                        LocalPP = playerData.LocalPP,
+                        LivePP = playerData.LivePP,
+                        Difference = playerData.LocalPP - playerData.LivePP
                     });
                 }
 
-                var localOrderedPlayers = calculatedPlayers.OrderByDescending(x => x.Item2).ToList();
-                var liveOrderedPlayers = calculatedPlayers.OrderByDescending(x => x.Item3).ToList();
-
                 Schedule(() =>
                 {
-                    foreach (var calculatedPlayer in calculatedPlayers)
-                    {
-                        leaderboardContainer.SetLayoutPosition(leaderboardContainer[liveOrderedPlayers.IndexOf(calculatedPlayer)], localOrderedPlayers.IndexOf(calculatedPlayer));
-                    }
+                    var leaderboardTable = new LeaderboardTable(pageTextBox.Value.Value, calculatedPlayers.OrderByDescending(x => x.LocalPP).ToList());
+                    LoadComponent(leaderboardTable);
+                    leaderboardContainer.Add(leaderboardTable);
                 });
             }, token).ContinueWith(t =>
             {
@@ -226,10 +213,10 @@ namespace PerformanceCalculatorGUI.Screens
             }, token);
         }
 
-        private async Task<UserPPListPanelData> calculatePlayer(UserStatistics player, CancellationToken token)
+        private async Task<UserCardData> calculatePlayer(UserStatistics player, CancellationToken token)
         {
             if (token.IsCancellationRequested)
-                return new UserPPListPanelData();
+                return new UserCardData();
 
             var plays = new List<ExtendedScore>();
 
@@ -264,10 +251,14 @@ namespace PerformanceCalculatorGUI.Screens
                     }
                     catch (Exception e)
                     {
+                        if (e is WebException)
+                        {
+                            // web exception usually means we hit rate limiting in which case we wanna bail immediately
+                            throw;
+                        }
+
                         Logger.Log(e.ToString(), level: LogLevel.Error);
                         notificationDisplay.Display(new Notification(e.Message));
-
-                        // should probably stop calculating??
                     }
                 });
             }
@@ -277,7 +268,7 @@ namespace PerformanceCalculatorGUI.Screens
             var liveOrdered = plays.OrderByDescending(x => x.LivePP).ToList();
 
             int index = 0;
-            decimal totalLocalPP = (decimal)localOrdered.Select(x => x.PP).Sum(play => Math.Pow(0.95, index++) * play);
+            decimal totalLocalPP = (decimal)(localOrdered.Select(x => x.PP).Sum(play => Math.Pow(0.95, index++) * play) ?? 0.0);
             decimal totalLivePP = player.PP ?? (decimal)0.0;
 
             index = 0;
@@ -287,11 +278,10 @@ namespace PerformanceCalculatorGUI.Screens
             var playcountBonusPP = (totalLivePP - nonBonusLivePP);
             totalLocalPP += playcountBonusPP;
 
-            return new UserPPListPanelData
+            return new UserCardData
             {
                 LivePP = totalLivePP,
-                LocalPP = totalLocalPP,
-                PlaycountPP = playcountBonusPP
+                LocalPP = totalLocalPP
             };
         }
     }

@@ -19,6 +19,7 @@ using osu.Game.Overlays;
 using osu.Game.Rulesets.Difficulty.Skills;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
 using osuTK;
+using PerformanceCalculatorGUI.Components.TextBoxes;
 
 namespace PerformanceCalculatorGUI.Components
 {
@@ -236,7 +237,7 @@ namespace PerformanceCalculatorGUI.Components
                 RelativeSizeAxes = Axes.X,
                 AutoSizeAxes = Axes.Y,
                 Masking = true,
-                CornerRadius = 15,
+                CornerRadius = ExtendedLabelledTextBox.CORNER_RADIUS,
                 Children = new Drawable[]
                 {
                     new Box

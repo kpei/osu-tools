@@ -20,6 +20,7 @@ using osu.Game.Rulesets;
 using osu.Game.Rulesets.Mods;
 using osuTK.Graphics;
 using PerformanceCalculatorGUI.Components;
+using PerformanceCalculatorGUI.Components.TextBoxes;
 using PerformanceCalculatorGUI.Configuration;
 
 namespace PerformanceCalculatorGUI.Screens
@@ -38,7 +39,7 @@ namespace PerformanceCalculatorGUI.Screens
 
         private LabelledTextBox usernameTextBox;
         private Container userPanelContainer;
-        private UserPPListPanel userPanel;
+        private UserCard userPanel;
 
         private string currentUser;
 
@@ -185,7 +186,7 @@ namespace PerformanceCalculatorGUI.Screens
                     if (userPanel != null)
                         userPanelContainer.Remove(userPanel);
 
-                    userPanelContainer.Add(userPanel = new UserPPListPanel(player)
+                    userPanelContainer.Add(userPanel = new UserCard(player)
                     {
                         RelativeSizeAxes = Axes.X
                     });
@@ -243,6 +244,7 @@ namespace PerformanceCalculatorGUI.Screens
                 {
                     foreach (var play in plays)
                     {
+                        play.Position.Value = localOrdered.IndexOf(play) + 1;
                         play.PositionChange.Value = liveOrdered.IndexOf(play) - localOrdered.IndexOf(play);
                         scores.SetLayoutPosition(scores[liveOrdered.IndexOf(play)], localOrdered.IndexOf(play));
                     }
@@ -261,7 +263,7 @@ namespace PerformanceCalculatorGUI.Screens
 
                 Schedule(() =>
                 {
-                    userPanel.Data.Value = new UserPPListPanelData
+                    userPanel.Data.Value = new UserCardData
                     {
                         LivePP = totalLivePP,
                         LocalPP = totalLocalPP,

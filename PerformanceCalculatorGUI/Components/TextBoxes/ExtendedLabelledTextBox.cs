@@ -3,14 +3,21 @@
 
 using osu.Game.Graphics.UserInterfaceV2;
 
-namespace PerformanceCalculatorGUI.Components
+namespace PerformanceCalculatorGUI.Components.TextBoxes
 {
     internal class ExtendedLabelledTextBox : LabelledTextBox
     {
+        public new const float CORNER_RADIUS = 8;
+
         public bool CommitOnFocusLoss
         {
             get => Component.CommitOnFocusLost;
             set => Component.CommitOnFocusLost = value;
+        }
+
+        public ExtendedLabelledTextBox()
+        {
+            CornerRadius = CORNER_RADIUS;
         }
     }
 }
