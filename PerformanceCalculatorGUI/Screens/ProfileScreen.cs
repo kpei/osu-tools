@@ -228,7 +228,7 @@ namespace PerformanceCalculatorGUI.Screens
                     var perfAttributes = performanceCalculator?.Calculate(parsedScore.ScoreInfo, difficultyAttributes);
                     score.PP = perfAttributes?.Total ?? 0.0;
 
-                    var extendedScore = new ExtendedScore(score, livePp, perfAttributes, working);
+                    var extendedScore = new ExtendedScore(score, livePp, perfAttributes);
                     plays.Add(extendedScore);
 
                     Schedule(() => scores.Add(new ExtendedProfileScore(extendedScore)));
@@ -237,7 +237,7 @@ namespace PerformanceCalculatorGUI.Screens
                 if (token.IsCancellationRequested)
                     return;
 
-                var localOrdered = plays.OrderByDescending(x => x.PP).ToList();
+                var localOrdered = plays.OrderByDescending(x => x.SoloScore.PP).ToList();
                 var liveOrdered = plays.OrderByDescending(x => x.LivePP).ToList();
 
                 Schedule(() =>
@@ -250,12 +250,15 @@ namespace PerformanceCalculatorGUI.Screens
                     }
                 });
 
-                int index = 0;
-                decimal totalLocalPP = (decimal)localOrdered.Select(x=> x.PP).Sum(play => Math.Pow(0.95, index++) * play);
+                decimal totalLocalPP = 0;
+                for (var i = 0; i < localOrdered.Count; i++)
+                    totalLocalPP += (decimal)(Math.Pow(0.95, i) * (localOrdered[i].SoloScore.PP ?? 0));
+
                 decimal totalLivePP = player.Statistics.PP ?? (decimal)0.0;
 
-                index = 0;
-                decimal nonBonusLivePP = (decimal)liveOrdered.Select(x => x.LivePP).Sum(play => Math.Pow(0.95, index++) * play);
+                decimal nonBonusLivePP = 0;
+                for (var i = 0; i < liveOrdered.Count; i++)
+                    nonBonusLivePP += (decimal)(Math.Pow(0.95, i) * liveOrdered[i].LivePP);
 
                 //todo: implement properly. this is pretty damn wrong.
                 var playcountBonusPP = (totalLivePP - nonBonusLivePP);
