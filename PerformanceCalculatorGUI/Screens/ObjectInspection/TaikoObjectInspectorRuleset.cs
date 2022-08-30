@@ -76,8 +76,6 @@ namespace PerformanceCalculatorGUI.Screens.ObjectInspection
                     panel.AddParagraph($"Rhythm Difficulty: {dho.Rhythm.Difficulty:N3}");
                     panel.AddParagraph($"Rhythm Ratio: {dho.Rhythm.Ratio:N3}");
 
-                    if (dho.StaminaCheese)
-                        panel.AddParagraph("Stamina Cheese!!!");
                 }
 
                 public override bool OnPressed(KeyBindingPressEvent<TaikoAction> e) => true;
