@@ -17,6 +17,7 @@ namespace PerformanceCalculatorGUI
     {
         public static readonly EndpointConfiguration ENDPOINT_CONFIGURATION = new ProductionEndpointConfiguration();
 
+        private static readonly string ENDPOINT_HUISMETBENEN = "https://pp-api.huismetbenen.nl";
         private readonly Bindable<string> clientIdBindable;
         private readonly Bindable<string> clientSecretBindable;
 
@@ -42,6 +43,14 @@ namespace PerformanceCalculatorGUI
             using var req = new JsonWebRequest<T>($"{ENDPOINT_CONFIGURATION.APIEndpointUrl}/api/v2/{request}");
             req.AddHeader("x-api-version", api_version.ToString(CultureInfo.InvariantCulture));
             req.AddHeader(System.Net.HttpRequestHeader.Authorization.ToString(), $"Bearer {token.AccessToken}");
+            await req.PerformAsync();
+
+            return req.ResponseObject;
+        }
+
+        public async Task<T> GetJsonFromHuismetbenenApi<T>(string request)
+        {
+            using var req = new JsonWebRequest<T>($"{ENDPOINT_HUISMETBENEN}{request}");
             await req.PerformAsync();
 
             return req.ResponseObject;

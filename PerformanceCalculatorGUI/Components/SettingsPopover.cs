@@ -1,7 +1,9 @@
 ﻿// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System.Collections.Generic;
 using osu.Framework.Allocation;
+using System.Linq;
 using osu.Framework.Bindables;
 using osu.Framework.Extensions;
 using osu.Framework.Graphics;
@@ -12,13 +14,29 @@ using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
-using osu.Game.Online.Chat;
 using osuTK;
 using PerformanceCalculatorGUI.Components.TextBoxes;
 using PerformanceCalculatorGUI.Configuration;
+using PerformanceCalculatorGUI.Online.API.Huismetbenen;
+using osu.Game.Online.Chat;
+using osu.Game.Rulesets;
 
 namespace PerformanceCalculatorGUI.Components
 {
+
+    public struct ReworkDropdownSelect
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public ReworkDropdownSelect(string id, string name) {
+            Id = id;
+            Name = name;
+        }
+        public override string ToString()
+        {
+            return Name;
+        }
+    }
     internal class SettingsPopover : OsuPopover
     {
         private SettingsManager configManager;
@@ -30,11 +48,14 @@ namespace PerformanceCalculatorGUI.Components
         private Bindable<string> pathBindable;
         private Bindable<string> cacheBindable;
         private Bindable<float> scaleBindable;
+        private Bindable<string> reworkIdBindable;
+        private Bindable<ReworkDropdownSelect> reworkBindable;
+
 
         private const string api_key_link = "https://osu.ppy.sh/home/account/edit#new-oauth-application";
 
         [BackgroundDependencyLoader]
-        private void load(SettingsManager configManager, OsuConfigManager osuConfig)
+        private async void load(SettingsManager configManager, APIManager apiManager, OsuConfigManager osuConfig, Bindable<RulesetInfo> ruleset)
         {
             this.configManager = configManager;
             clientIdBindable = configManager.GetBindable<string>(Settings.ClientId);
@@ -42,6 +63,17 @@ namespace PerformanceCalculatorGUI.Components
             pathBindable = configManager.GetBindable<string>(Settings.DefaultPath);
             cacheBindable = configManager.GetBindable<string>(Settings.CachePath);
             scaleBindable = osuConfig.GetBindable<float>(OsuSetting.UIScale);
+            reworkIdBindable = configManager.GetBindable<string>(Settings.ReworkId);
+            
+            List<APIRework> reworks = await apiManager.GetJsonFromHuismetbenenApi<List<APIRework>>("/reworks/list");
+            ReworkDropdownSelect[] reworkItems = reworks.FindAll((r) => r.Gamemode == ruleset.Value.OnlineID)
+                .Select((r) => new ReworkDropdownSelect(r.Id.ToString(), r.Name))
+                .Prepend(new ReworkDropdownSelect(string.Empty, "None"))
+                .ToArray();
+
+            ReworkDropdownSelect reworkItem = reworkItems.FirstOrDefault((r) => r.Id == reworkIdBindable.Value, reworkItems[0]);
+            reworkBindable = new Bindable<ReworkDropdownSelect>(reworkItem);
+            reworkBindable.ValueChanged += (v) => reworkIdBindable.Value = v.NewValue.Id;
 
             Add(new Container
             {
@@ -75,6 +107,12 @@ namespace PerformanceCalculatorGUI.Components
                                 RelativeSizeAxes = Axes.X,
                                 Label = "Client Secret",
                                 Current = { BindTarget = clientSecretBindable }
+                            },
+                            new LabelledDropdown<ReworkDropdownSelect>{
+                                Label = "Use Rework Branch as Live",
+                                RelativeSizeAxes = Axes.X,
+                                Items = reworkItems,
+                                Current = { BindTarget = reworkBindable }
                             },
                             new Box
                             {
