@@ -108,7 +108,7 @@ namespace PerformanceCalculatorGUI.Online.API.Huismetbenen
         public SoloScoreInfo ToSoloScoreInfo(int rulesetId)  {
             Dictionary<HitResult, int> hitStatistics = new Dictionary<HitResult, int>();
             hitStatistics.Add(HitResult.Great, Great);
-            hitStatistics.Add(HitResult.Good, Good);
+            hitStatistics.Add(HitResult.Ok, Good);
             hitStatistics.Add(HitResult.Meh, Meh);
             hitStatistics.Add(HitResult.Miss, Miss);
 
@@ -133,6 +133,7 @@ namespace PerformanceCalculatorGUI.Online.API.Huismetbenen
                 Mods = Mods,
                 PP = LocalPp,
                 Statistics = hitStatistics,
+                EndedAt = ScoreDate,
             };
         }
 
