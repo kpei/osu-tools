@@ -269,6 +269,8 @@ namespace PerformanceCalculatorGUI.Screens
                 for (var i = 0; i < liveOrdered.Count; i++)
                     nonBonusLivePP += (decimal)(Math.Pow(0.95, i) * liveOrdered[i].LivePP);
 
+                if (reworkId != string.Empty) totalLivePP = nonBonusLivePP;
+
                 //todo: implement properly. this is pretty damn wrong.
                 var playcountBonusPP = (totalLivePP - nonBonusLivePP);
                 totalLocalPP += playcountBonusPP;

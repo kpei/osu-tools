@@ -22,6 +22,7 @@ using osu.Game.Users;
 using PerformanceCalculatorGUI.Components;
 using PerformanceCalculatorGUI.Components.TextBoxes;
 using PerformanceCalculatorGUI.Configuration;
+using PerformanceCalculatorGUI.Online.API.Huismetbenen;
 
 namespace PerformanceCalculatorGUI.Screens
 {
@@ -220,13 +221,21 @@ namespace PerformanceCalculatorGUI.Screens
 
             var plays = new List<ExtendedScore>();
 
-            var apiScores = await apiManager.GetJsonFromApi<List<SoloScoreInfo>>($"users/{player.User.OnlineID}/scores/best?mode={ruleset.Value.ShortName}&limit=100");
-
             var rulesetInstance = ruleset.Value.CreateInstance();
+
+            string reworkId = configManager.GetBindable<string>(Settings.ReworkId).Value;
+
+            List<SoloScoreInfo> apiScores;
+            if (reworkId == String.Empty) {
+                apiScores = await apiManager.GetJsonFromApi<List<SoloScoreInfo>>($"users/{player.User.OnlineID}/scores/best?mode={ruleset.Value.ShortName}&limit=100");
+            } else {
+                var scores = await apiManager.GetJsonFromHuismetbenenApi<List<APIScore>>($"/player/topscores/{player.User.OnlineID}/{reworkId}");
+                apiScores = scores.Select((s) => s.ToSoloScoreInfo(rulesetInstance.RulesetInfo.OnlineID)).ToList();
+            }
 
             try
             {
-                Parallel.ForEach(apiScores, new ParallelOptions { CancellationToken = token }, score =>
+                Parallel.ForEach(apiScores, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = token }, score =>
                 {
                     try
                     {
@@ -273,7 +282,9 @@ namespace PerformanceCalculatorGUI.Screens
 
             index = 0;
             decimal nonBonusLivePP = (decimal)liveOrdered.Select(x => x.LivePP).Sum(play => Math.Pow(0.95, index++) * play);
-
+            
+            if (reworkId != string.Empty) totalLivePP = nonBonusLivePP;
+            
             //todo: implement properly. this is pretty damn wrong.
             var playcountBonusPP = (totalLivePP - nonBonusLivePP);
             totalLocalPP += playcountBonusPP;
