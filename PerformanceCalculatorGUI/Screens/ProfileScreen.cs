@@ -22,6 +22,7 @@ using osuTK.Graphics;
 using PerformanceCalculatorGUI.Components;
 using PerformanceCalculatorGUI.Components.TextBoxes;
 using PerformanceCalculatorGUI.Configuration;
+using PerformanceCalculatorGUI.Online.API.Huismetbenen;
 
 namespace PerformanceCalculatorGUI.Screens
 {
@@ -203,8 +204,16 @@ namespace PerformanceCalculatorGUI.Screens
 
                 Schedule(() => loadingLayer.Text.Value = $"Calculating {player.Username} top scores...");
 
-                var apiScores = await apiManager.GetJsonFromApi<List<SoloScoreInfo>>($"users/{player.OnlineID}/scores/best?mode={ruleset.Value.ShortName}&limit=100");
+                string reworkId = configManager.GetBindable<string>(Settings.ReworkId).Value;
 
+                List<SoloScoreInfo> apiScores;
+                if (reworkId == String.Empty) {
+                    apiScores = await apiManager.GetJsonFromApi<List<SoloScoreInfo>>($"users/{player.OnlineID}/scores/best?mode={ruleset.Value.ShortName}&limit=100");
+                } else {
+                    var scores = await apiManager.GetJsonFromHuismetbenenApi<List<APIScore>>($"/player/topscores/{player.OnlineID}/{reworkId}");
+                    apiScores = scores.Select((s) => s.ToSoloScoreInfo(rulesetInstance.RulesetInfo.OnlineID)).ToList();
+                }
+                
                 foreach (var score in apiScores)
                 {
                     if (token.IsCancellationRequested)

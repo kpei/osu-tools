@@ -2,10 +2,13 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using osu.Game.Online.API;
+using osu.Game.Online.API.Requests.Responses;
+using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
 
 namespace PerformanceCalculatorGUI.Online.API.Huismetbenen
@@ -101,6 +104,37 @@ namespace PerformanceCalculatorGUI.Online.API.Huismetbenen
 
         [JsonProperty("new_rank")]
         public int? NewRank { get; set; }
+
+        public SoloScoreInfo ToSoloScoreInfo(int rulesetId)  {
+            Dictionary<HitResult, int> hitStatistics = new Dictionary<HitResult, int>();
+            hitStatistics.Add(HitResult.Great, Great);
+            hitStatistics.Add(HitResult.Good, Good);
+            hitStatistics.Add(HitResult.Meh, Meh);
+            hitStatistics.Add(HitResult.Miss, Miss);
+
+            APIBeatmap beatmap = new APIBeatmap() {
+                OnlineID = BeatmapId,
+                BeatmapSet = new APIBeatmapSet() {
+                    Title = Title,
+                    TitleUnicode = Title,
+                    Artist = Artist,
+                    ArtistUnicode = Artist,
+                }
+            };
+
+            return new SoloScoreInfo() {
+                Beatmap = beatmap,
+                BeatmapID = BeatmapId,
+                RulesetID = rulesetId,
+                Accuracy = Accuracy / 100d,
+                UserID = UserId,
+                MaxCombo = MaxCombo,
+                Rank = ScoreRank, 
+                Mods = Mods,
+                PP = LocalPp,
+                Statistics = hitStatistics,
+            };
+        }
 
     }
 

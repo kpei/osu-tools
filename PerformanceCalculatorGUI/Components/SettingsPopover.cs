@@ -108,7 +108,7 @@ namespace PerformanceCalculatorGUI.Components
                                 Label = "Client Secret",
                                 Current = { BindTarget = clientSecretBindable }
                             },
-                            new LabelledDropdown<ReworkDropdownSelect>{
+                            new ExtendedLabelledDropdown<ReworkDropdownSelect>{
                                 Label = "Use Rework Branch as Live",
                                 RelativeSizeAxes = Axes.X,
                                 Items = reworkItems,
