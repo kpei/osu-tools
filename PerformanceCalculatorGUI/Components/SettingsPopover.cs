@@ -109,7 +109,7 @@ namespace PerformanceCalculatorGUI.Components
                                 Current = { BindTarget = clientSecretBindable }
                             },
                             new ExtendedLabelledDropdown<ReworkDropdownSelect>{
-                                Label = "Use Rework Branch as Live",
+                                Label = "Replace Live PP with Rework PP",
                                 RelativeSizeAxes = Axes.X,
                                 Items = reworkItems,
                                 Current = { BindTarget = reworkBindable }
