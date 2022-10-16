@@ -14,17 +14,22 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
+using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
 using osu.Framework.Input.States;
 using osu.Framework.Logging;
 using osu.Framework.Threading;
 using osu.Game.Beatmaps;
+using osu.Game.Beatmaps.Formats;
 using osu.Game.Configuration;
+using osu.Game.Database;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
+using osu.Game.Input.Bindings;
+using osu.Game.IO;
 using osu.Game.Overlays;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Difficulty;
@@ -32,9 +37,13 @@ using osu.Game.Rulesets.Difficulty.Skills;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Scoring;
 using osu.Game.Scoring;
+using osu.Game.Screens.Play;
 using osu.Game.Screens.Play.HUD;
+using osu.Game.Screens.Select;
 using osu.Game.Utils;
 using osuTK;
+using osuTK.Graphics;
+using osuTK.Input;
 using PerformanceCalculatorGUI.Components;
 using PerformanceCalculatorGUI.Components.TextBoxes;
 using PerformanceCalculatorGUI.Configuration;
@@ -49,9 +58,7 @@ namespace PerformanceCalculatorGUI.Screens
         private ExtendedUserModSelectOverlay userModsSelectOverlay;
 
         private GridContainer beatmapImportContainer;
-        private LabelledTextBox beatmapFileTextBox;
         private LabelledTextBox beatmapIdTextBox;
-        private SwitchButton beatmapImportTypeSwitch;
 
         private LimitedLabelledNumberBox missesTextBox;
         private LimitedLabelledNumberBox comboTextBox;
@@ -85,6 +92,10 @@ namespace PerformanceCalculatorGUI.Screens
 
         private ScheduledDelegate debouncedPerformanceUpdate;
 
+        private BeatmapCarousel Carousel { get; set; }
+
+        private Container carouselContainer;
+
         [Resolved]
         private NotificationDisplay notificationDisplay { get; set; }
 
@@ -103,6 +114,15 @@ namespace PerformanceCalculatorGUI.Screens
         [Resolved]
         private SettingsManager configManager { get; set; }
 
+        [Resolved]
+        private RealmAccess? realmAccess { get; set; }
+
+        [Resolved]
+        private RealmFileStore? realmFileStore { get; set; }
+
+        [Resolved]
+        private BeatmapManager? beatmapManager { get; set; }
+
         [Cached]
         private OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Blue);
 
@@ -116,16 +136,30 @@ namespace PerformanceCalculatorGUI.Screens
             RelativeSizeAxes = Axes.Both;
         }
 
-        [BackgroundDependencyLoader]
+        [BackgroundDependencyLoader(true)]
         private void load()
         {
+
+            LoadComponentAsync(Carousel = new BeatmapCarousel
+            {
+                AllowSelection = false, // delay any selection until our bindables are ready to make a good choice.
+                Anchor = Anchor.TopLeft,
+                Origin = Anchor.TopLeft,
+                RelativeSizeAxes = Axes.Both,
+                SelectionChanged = updateSelectedBeatmap,
+                BeatmapSetsChanged = carouselBeatmapsLoaded,
+            }, c => carouselContainer.Child = c);
+
             InternalChildren = new Drawable[]
             {
                 new GridContainer
                 {
                     RelativeSizeAxes = Axes.Both,
                     ColumnDimensions = new[] { new Dimension() },
-                    RowDimensions = new[] { new Dimension(GridSizeMode.Absolute, file_selection_container_height), new Dimension(GridSizeMode.Absolute, map_title_container_height), new Dimension() },
+                    RowDimensions = new[] { 
+                        new Dimension(GridSizeMode.Absolute, file_selection_container_height),
+                        new Dimension(GridSizeMode.Absolute, map_title_container_height),
+                    },
                     Content = new[]
                     {
                         new Drawable[]
@@ -145,311 +179,261 @@ namespace PerformanceCalculatorGUI.Screens
                                 {
                                     new Drawable[]
                                     {
-                                        beatmapFileTextBox = new FileChooserLabelledTextBox(configManager.GetBindable<string>(Settings.DefaultPath), ".osu")
-                                        {
-                                            Label = "Beatmap File",
-                                            FixedLabelWidth = 120f,
-                                            PlaceholderText = "Click to select a beatmap file"
-                                        },
                                         beatmapIdTextBox = new LimitedLabelledNumberBox
                                         {
                                             Label = "Beatmap ID",
                                             FixedLabelWidth = 120f,
                                             PlaceholderText = "Enter beatmap ID",
                                             CommitOnFocusLoss = false
-                                        },
-                                        beatmapImportTypeSwitch = new SwitchButton
-                                        {
-                                            Width = 80,
-                                            Height = 40
                                         }
                                     }
                                 }
                             }
                         },
-                        new Drawable[]
+                    }
+                },
+                beatmapDataContainer = new FillFlowContainer
+                {
+                    Name = "Beatmap data",
+                    RelativeSizeAxes = Axes.Both,
+                    Direction = FillDirection.Horizontal,
+                    Margin = new MarginPadding { Top = file_selection_container_height },
+                    Children = new Drawable[]
+                    {
+                        new OsuScrollContainer(Direction.Vertical)
                         {
-                            new Container
+                            Name = "Score params",
+                            RelativeSizeAxes = Axes.Both,
+                            Width = 0.5f,
+                            Child = new FillFlowContainer
                             {
-                                Name = "Beatmap title",
-                                RelativeSizeAxes = Axes.Both,
+                                Padding = new MarginPadding(15.0f),
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                Direction = FillDirection.Vertical,
+                                Spacing = new Vector2(0, 2f),
                                 Children = new Drawable[]
                                 {
-                                    beatmapTitle = new OsuSpriteText
+                                    new OsuSpriteText
                                     {
-                                        Anchor = Anchor.Centre,
-                                        Origin = Anchor.Centre,
-                                        Height = map_title_container_height,
-                                        Text = "No beatmap loaded!"
+                                        Margin = new MarginPadding(10.0f),
+                                        Origin = Anchor.TopLeft,
+                                        Height = 20,
+                                        Text = "Score params"
                                     },
-                                }
-                            }
-                        },
-                        new Drawable[]
-                        {
-                            beatmapDataContainer = new FillFlowContainer
-                            {
-                                Name = "Beatmap data",
-                                RelativeSizeAxes = Axes.Both,
-                                Direction = FillDirection.Horizontal,
-                                Children = new Drawable[]
-                                {
-                                    new OsuScrollContainer(Direction.Vertical)
+                                    accuracyContainer = new GridContainer
                                     {
-                                        Name = "Score params",
-                                        RelativeSizeAxes = Axes.Both,
-                                        Width = 0.5f,
-                                        Child = new FillFlowContainer
+                                        RelativeSizeAxes = Axes.X,
+                                        AutoSizeAxes = Axes.Y,
+                                        ColumnDimensions = new[]
                                         {
-                                            Padding = new MarginPadding(15.0f),
-                                            RelativeSizeAxes = Axes.X,
-                                            AutoSizeAxes = Axes.Y,
-                                            Direction = FillDirection.Vertical,
-                                            Spacing = new Vector2(0, 2f),
-                                            Children = new Drawable[]
+                                            new Dimension(),
+                                            new Dimension(GridSizeMode.Absolute),
+                                            new Dimension(GridSizeMode.Absolute),
+                                            new Dimension(GridSizeMode.AutoSize)
+                                        },
+                                        RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
+                                        Content = new[]
+                                        {
+                                            new Drawable[]
                                             {
-                                                new OsuSpriteText
-                                                {
-                                                    Margin = new MarginPadding(10.0f),
-                                                    Origin = Anchor.TopLeft,
-                                                    Height = 20,
-                                                    Text = "Score params"
-                                                },
-                                                accuracyContainer = new GridContainer
-                                                {
-                                                    RelativeSizeAxes = Axes.X,
-                                                    AutoSizeAxes = Axes.Y,
-                                                    ColumnDimensions = new[]
-                                                    {
-                                                        new Dimension(),
-                                                        new Dimension(GridSizeMode.Absolute),
-                                                        new Dimension(GridSizeMode.Absolute),
-                                                        new Dimension(GridSizeMode.AutoSize)
-                                                    },
-                                                    RowDimensions = new[] { new Dimension(GridSizeMode.AutoSize) },
-                                                    Content = new[]
-                                                    {
-                                                        new Drawable[]
-                                                        {
-                                                            accuracyTextBox = new LimitedLabelledFractionalNumberBox
-                                                            {
-                                                                RelativeSizeAxes = Axes.X,
-                                                                Anchor = Anchor.TopLeft,
-                                                                Label = "Accuracy",
-                                                                PlaceholderText = "100",
-                                                                MaxValue = 100.0,
-                                                                MinValue = 0.0,
-                                                                Value = { Value = 100.0 }
-                                                            },
-                                                            goodsTextBox = new LimitedLabelledNumberBox
-                                                            {
-                                                                RelativeSizeAxes = Axes.X,
-                                                                Anchor = Anchor.TopLeft,
-                                                                Label = "Goods",
-                                                                PlaceholderText = "0",
-                                                                MinValue = 0
-                                                            },
-                                                            mehsTextBox = new LimitedLabelledNumberBox
-                                                            {
-                                                                RelativeSizeAxes = Axes.X,
-                                                                Anchor = Anchor.TopLeft,
-                                                                Label = "Mehs",
-                                                                PlaceholderText = "0",
-                                                                MinValue = 0
-                                                            },
-                                                            fullScoreDataSwitch = new SwitchButton
-                                                            {
-                                                                Width = 80,
-                                                                Height = 40
-                                                            }
-                                                        }
-                                                    }
-                                                },
-                                                missesTextBox = new LimitedLabelledNumberBox
+                                                accuracyTextBox = new LimitedLabelledFractionalNumberBox
                                                 {
                                                     RelativeSizeAxes = Axes.X,
                                                     Anchor = Anchor.TopLeft,
-                                                    Label = "Misses",
+                                                    Label = "Accuracy",
+                                                    PlaceholderText = "100",
+                                                    MaxValue = 100.0,
+                                                    MinValue = 0.0,
+                                                    Value = { Value = 100.0 }
+                                                },
+                                                goodsTextBox = new LimitedLabelledNumberBox
+                                                {
+                                                    RelativeSizeAxes = Axes.X,
+                                                    Anchor = Anchor.TopLeft,
+                                                    Label = "Goods",
                                                     PlaceholderText = "0",
                                                     MinValue = 0
                                                 },
-                                                comboTextBox = new LimitedLabelledNumberBox
+                                                mehsTextBox = new LimitedLabelledNumberBox
                                                 {
                                                     RelativeSizeAxes = Axes.X,
                                                     Anchor = Anchor.TopLeft,
-                                                    Label = "Combo",
+                                                    Label = "Mehs",
                                                     PlaceholderText = "0",
                                                     MinValue = 0
                                                 },
-                                                scoreTextBox = new LimitedLabelledNumberBox
+                                                fullScoreDataSwitch = new SwitchButton
                                                 {
-                                                    RelativeSizeAxes = Axes.X,
-                                                    Anchor = Anchor.TopLeft,
-                                                    Label = "Score",
-                                                    PlaceholderText = "1000000",
-                                                    MinValue = 0,
-                                                    MaxValue = 1000000,
-                                                    Value = { Value = 1000000 }
-                                                },
-                                                new FillFlowContainer
-                                                {
-                                                    Name = "Mods container",
-                                                    Height = 40,
-                                                    Direction = FillDirection.Horizontal,
-                                                    RelativeSizeAxes = Axes.X,
-                                                    Anchor = Anchor.TopLeft,
-                                                    AutoSizeAxes = Axes.Y,
-                                                    Children = new Drawable[]
-                                                    {
-                                                        new OsuButton
-                                                        {
-                                                            Width = 100,
-                                                            Margin = new MarginPadding { Top = 4.0f, Right = 5.0f },
-                                                            Action = () => { userModsSelectOverlay.Show(); },
-                                                            BackgroundColour = colourProvider.Background1,
-                                                            Text = "Mods"
-                                                        },
-                                                        modDisplay = new ModDisplay()
-                                                    }
-                                                },
-                                                new ScalingContainer(ScalingMode.Everything)
-                                                {
-                                                    Name = "Mod selection overlay",
-                                                    RelativeSizeAxes = Axes.X,
-                                                    Height = 300,
-                                                    Width = 0.75f,
-                                                    Scale = new Vector2(1.5f),
-                                                    Child = userModsSelectOverlay = new ExtendedUserModSelectOverlay
-                                                    {
-                                                        RelativeSizeAxes = Axes.Both,
-                                                        Anchor = Anchor.TopLeft,
-                                                        Origin = Anchor.TopLeft,
-                                                        IsValidMod = mod => mod.HasImplementation && ModUtils.FlattenMod(mod).All(m => m.UserPlayable),
-                                                        SelectedMods = { BindTarget = appliedMods }
-                                                    }
+                                                    Width = 80,
+                                                    Height = 40
                                                 }
                                             }
                                         }
                                     },
-                                    new OsuScrollContainer(Direction.Vertical)
+                                    missesTextBox = new LimitedLabelledNumberBox
                                     {
-                                        Name = "Difficulty calculation results",
-                                        RelativeSizeAxes = Axes.Both,
-                                        Width = 0.5f,
-                                        Child = new FillFlowContainer
+                                        RelativeSizeAxes = Axes.X,
+                                        Anchor = Anchor.TopLeft,
+                                        Label = "Misses",
+                                        PlaceholderText = "0",
+                                        MinValue = 0
+                                    },
+                                    comboTextBox = new LimitedLabelledNumberBox
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        Anchor = Anchor.TopLeft,
+                                        Label = "Combo",
+                                        PlaceholderText = "0",
+                                        MinValue = 0
+                                    },
+                                    scoreTextBox = new LimitedLabelledNumberBox
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        Anchor = Anchor.TopLeft,
+                                        Label = "Score",
+                                        PlaceholderText = "1000000",
+                                        MinValue = 0,
+                                        MaxValue = 1000000,
+                                        Value = { Value = 1000000 }
+                                    },
+                                    new FillFlowContainer
+                                    {
+                                        Name = "Mods container",
+                                        Height = 40,
+                                        Direction = FillDirection.Horizontal,
+                                        RelativeSizeAxes = Axes.X,
+                                        Anchor = Anchor.TopLeft,
+                                        AutoSizeAxes = Axes.Y,
+                                        Children = new Drawable[]
                                         {
-                                            Padding = new MarginPadding(15.0f),
-                                            RelativeSizeAxes = Axes.X,
-                                            AutoSizeAxes = Axes.Y,
-                                            Direction = FillDirection.Vertical,
-                                            Spacing = new Vector2(0, 5f),
-                                            Children = new Drawable[]
+                                            new OsuButton
                                             {
-                                                new OsuSpriteText
-                                                {
-                                                    Margin = new MarginPadding(10.0f),
-                                                    Origin = Anchor.TopLeft,
-                                                    Height = 20,
-                                                    Text = "Difficulty Attributes"
-                                                },
-                                                difficultyAttributesContainer = new FillFlowContainer
-                                                {
-                                                    Direction = FillDirection.Vertical,
-                                                    RelativeSizeAxes = Axes.X,
-                                                    Anchor = Anchor.TopLeft,
-                                                    AutoSizeAxes = Axes.Y,
-                                                    Spacing = new Vector2(0, 2f)
-                                                },
-                                                new OsuSpriteText
-                                                {
-                                                    Margin = new MarginPadding(10.0f),
-                                                    Origin = Anchor.TopLeft,
-                                                    Height = 20,
-                                                    Text = "Performance Attributes"
-                                                },
-                                                performanceAttributesContainer = new FillFlowContainer
-                                                {
-                                                    Direction = FillDirection.Vertical,
-                                                    RelativeSizeAxes = Axes.X,
-                                                    Anchor = Anchor.TopLeft,
-                                                    AutoSizeAxes = Axes.Y,
-                                                    Spacing = new Vector2(0, 2f)
-                                                },
-                                                new OsuSpriteText
-                                                {
-                                                    Margin = new MarginPadding(10.0f),
-                                                    Origin = Anchor.TopLeft,
-                                                    Height = 20,
-                                                    Text = "Strain graph (alt+scroll to zoom)"
-                                                },
-                                                new Container
-                                                {
-                                                    RelativeSizeAxes = Axes.X,
-                                                    Anchor = Anchor.TopLeft,
-                                                    AutoSizeAxes = Axes.Y,
-                                                    Child = strainVisualizer = new StrainVisualizer()
-                                                },
-                                                new OsuButton
-                                                {
-                                                    Anchor = Anchor.TopCentre,
-                                                    Origin = Anchor.TopCentre,
-                                                    Width = 250,
-                                                    BackgroundColour = colourProvider.Background1,
-                                                    Text = "Inspect Object Difficulty Data",
-                                                    Action = () =>
-                                                    {
-                                                        if (objectInspector is not null)
-                                                            RemoveInternal(objectInspector);
+                                                Width = 100,
+                                                Margin = new MarginPadding { Top = 4.0f, Right = 5.0f },
+                                                Action = () => { userModsSelectOverlay.Show(); },
+                                                BackgroundColour = colourProvider.Background1,
+                                                Text = "Mods"
+                                            },
+                                            modDisplay = new ModDisplay()
+                                        }
+                                    },
+                                    new ScalingContainer(ScalingMode.Everything)
+                                    {
+                                        Name = "Mod selection overlay",
+                                        RelativeSizeAxes = Axes.X,
+                                        Height = 300,
+                                        Width = 0.75f,
+                                        Scale = new Vector2(1.5f),
+                                        Child = userModsSelectOverlay = new ExtendedUserModSelectOverlay
+                                        {
+                                            RelativeSizeAxes = Axes.Both,
+                                            Anchor = Anchor.TopLeft,
+                                            Origin = Anchor.TopLeft,
+                                            IsValidMod = mod => mod.HasImplementation && ModUtils.FlattenMod(mod).All(m => m.UserPlayable),
+                                            SelectedMods = { BindTarget = appliedMods }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        new OsuScrollContainer(Direction.Vertical)
+                        {
+                            Name = "Difficulty calculation results",
+                            RelativeSizeAxes = Axes.Both,
+                            Width = 0.5f,
+                            Child = new FillFlowContainer
+                            {
+                                Padding = new MarginPadding(15.0f),
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                Direction = FillDirection.Vertical,
+                                Spacing = new Vector2(0, 5f),
+                                Children = new Drawable[]
+                                {
+                                    new OsuSpriteText
+                                    {
+                                        Margin = new MarginPadding(10.0f),
+                                        Origin = Anchor.TopLeft,
+                                        Height = 20,
+                                        Text = "Difficulty Attributes"
+                                    },
+                                    difficultyAttributesContainer = new FillFlowContainer
+                                    {
+                                        Direction = FillDirection.Vertical,
+                                        RelativeSizeAxes = Axes.X,
+                                        Anchor = Anchor.TopLeft,
+                                        AutoSizeAxes = Axes.Y,
+                                        Spacing = new Vector2(0, 2f)
+                                    },
+                                    new OsuSpriteText
+                                    {
+                                        Margin = new MarginPadding(10.0f),
+                                        Origin = Anchor.TopLeft,
+                                        Height = 20,
+                                        Text = "Performance Attributes"
+                                    },
+                                    performanceAttributesContainer = new FillFlowContainer
+                                    {
+                                        Direction = FillDirection.Vertical,
+                                        RelativeSizeAxes = Axes.X,
+                                        Anchor = Anchor.TopLeft,
+                                        AutoSizeAxes = Axes.Y,
+                                        Spacing = new Vector2(0, 2f)
+                                    },
+                                    new OsuSpriteText
+                                    {
+                                        Margin = new MarginPadding(10.0f),
+                                        Origin = Anchor.TopLeft,
+                                        Height = 20,
+                                        Text = "Strain graph (alt+scroll to zoom)"
+                                    },
+                                    new Container
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        Anchor = Anchor.TopLeft,
+                                        AutoSizeAxes = Axes.Y,
+                                        Child = strainVisualizer = new StrainVisualizer()
+                                    },
+                                    new OsuButton
+                                    {
+                                        Anchor = Anchor.TopCentre,
+                                        Origin = Anchor.TopCentre,
+                                        Width = 250,
+                                        BackgroundColour = colourProvider.Background1,
+                                        Text = "Inspect Object Difficulty Data",
+                                        Action = () =>
+                                        {
+                                            if (objectInspector is not null)
+                                                RemoveInternal(objectInspector);
 
-                                                        AddInternal(objectInspector = new ObjectInspector(working)
-                                                        {
-                                                            RelativeSizeAxes = Axes.Both,
-                                                            Anchor = Anchor.Centre,
-                                                            Origin = Anchor.Centre,
-                                                            Size = new Vector2(0.95f)
-                                                        });
-                                                        objectInspector.Show();
-                                                    }
-                                                }
-                                            }
+                                            AddInternal(objectInspector = new ObjectInspector(working)
+                                            {
+                                                RelativeSizeAxes = Axes.Both,
+                                                Anchor = Anchor.Centre,
+                                                Origin = Anchor.Centre,
+                                                Size = new Vector2(0.95f)
+                                            });
+                                            objectInspector.Show();
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                }
+                },
+                carouselContainer = new Container
+                {
+                    Depth = 1,
+                    RelativeSizeAxes = Axes.Both,
+                    Child = new LoadingSpinner(true) { State = { Value = Visibility.Visible } }
+                },
             };
 
             beatmapDataContainer.Hide();
             userModsSelectOverlay.Hide();
 
-            beatmapFileTextBox.Current.BindValueChanged(filePath => { changeBeatmap(filePath.NewValue); });
             beatmapIdTextBox.OnCommit += (_, _) => { changeBeatmap(beatmapIdTextBox.Current.Value); };
-
-            beatmapImportTypeSwitch.Current.BindValueChanged(val =>
-            {
-                if (val.NewValue)
-                {
-                    beatmapImportContainer.ColumnDimensions = new[]
-                    {
-                        new Dimension(GridSizeMode.Absolute),
-                        new Dimension(),
-                        new Dimension(GridSizeMode.AutoSize)
-                    };
-
-                    fixupTextBox(beatmapIdTextBox);
-                }
-                else
-                {
-                    beatmapImportContainer.ColumnDimensions = new[]
-                    {
-                        new Dimension(),
-                        new Dimension(GridSizeMode.Absolute),
-                        new Dimension(GridSizeMode.AutoSize)
-                    };
-                }
-            });
 
             accuracyTextBox.Value.BindValueChanged(_ => debouncedCalculatePerformance());
             goodsTextBox.Value.BindValueChanged(_ => debouncedCalculatePerformance());
@@ -492,6 +476,25 @@ namespace PerformanceCalculatorGUI.Screens
         private ModSettingChangeTracker modSettingChangeTracker;
         private ScheduledDelegate debouncedStatisticsUpdate;
 
+        private BeatmapSetInfo previousBeatmapSet;
+
+        private void updateSelectedBeatmap(BeatmapInfo beatmapInfo)
+        {
+            if (beatmapInfo is null) return;
+
+            if (previousBeatmapSet is not null && previousBeatmapSet.Equals(beatmapInfo.BeatmapSet)) {
+                changeBeatmap(beatmapInfo.OnlineID.ToString());
+            }
+
+            previousBeatmapSet = beatmapInfo.BeatmapSet;
+            loadBackground(beatmapInfo);
+        }
+
+        private void carouselBeatmapsLoaded()
+        {
+            Carousel.AllowSelection = true;
+        }
+
         private void modsChanged(ValueChangedEvent<IReadOnlyList<Mod>> mods)
         {
             modSettingChangeTracker?.Dispose();
@@ -518,7 +521,7 @@ namespace PerformanceCalculatorGUI.Screens
         private void resetBeatmap()
         {
             working = null;
-            beatmapTitle.Text = string.Empty;
+            // beatmapTitle.Text = string.Empty;
             resetMods();
             beatmapDataContainer.Hide();
 
@@ -541,7 +544,19 @@ namespace PerformanceCalculatorGUI.Screens
 
             try
             {
-                working = ProcessorWorkingBeatmap.FromFileOrId(beatmap, audio, configManager.GetBindable<string>(Settings.CachePath).Value);
+                if (realmAccess != null && Int32.TryParse(beatmap, out int onlineId)) {
+                    BeatmapInfo lazerBeatmap = realmAccess.Run(r => r.All<BeatmapInfo>().FirstOrDefault(b => b.OnlineID == onlineId)?.Detach());
+                    if (lazerBeatmap != null) {
+                        string fileStorePath = lazerBeatmap.BeatmapSet.GetPathForFile(lazerBeatmap.Path);
+                        var stream = realmFileStore.Store.GetStream(fileStorePath);
+                        using (var reader = new LineBufferedReader(stream))
+                            working = new ProcessorWorkingBeatmap(Decoder.GetDecoder<Beatmap>(reader).Decode(reader), onlineId);
+                    }
+                }
+
+                if (working == null) {
+                    working = ProcessorWorkingBeatmap.FromFileOrId(beatmap, audio, configManager.GetBindable<string>(Settings.CachePath).Value);
+                }
             }
             catch (Exception e)
             {
@@ -562,13 +577,24 @@ namespace PerformanceCalculatorGUI.Screens
                 resetCalculations();
             }
 
-            beatmapTitle.Text = $"[{ruleset.Value.Name}] {working.BeatmapInfo.GetDisplayTitle()}";
+            // beatmapTitle.Text = $"[{ruleset.Value.Name}] {working.BeatmapInfo.GetDisplayTitle()}";
 
-            loadBackground();
+            // loadBackground(working.BeatmapInfo);
 
             beatmapDataContainer.Show();
+            carouselContainer.Hide();
         }
 
+        protected override bool OnKeyDown(KeyDownEvent e)
+        {
+            if (e.Key == Key.Escape && beatmapDataContainer.Alpha == 1) {
+                beatmapDataContainer.Hide();
+                userModsSelectOverlay.Hide();
+                carouselContainer.Show();
+                return true;
+            }
+            return base.OnKeyDown(e);
+        }
         private void createCalculators()
         {
             if (working is null)
@@ -849,14 +875,23 @@ namespace PerformanceCalculatorGUI.Screens
             previousMaxCombo = difficultyAttributes.MaxCombo;
         }
 
-        private void loadBackground()
+        private void loadBackground(BeatmapInfo? beatmap)
         {
             if (background is not null)
             {
                 RemoveInternal(background);
             }
 
-            if (working.BeatmapInfo?.BeatmapSet?.OnlineID is not null)
+            Texture bgTexture = null;
+            if (beatmapManager != null) {
+                bgTexture = beatmapManager.GetWorkingBeatmap(beatmap)?.Background;
+            }
+            
+            if (bgTexture is null && beatmap?.BeatmapSet?.OnlineID != null) {
+                bgTexture = textures.Get($"https://assets.ppy.sh/beatmaps/{beatmap.BeatmapSet.OnlineID}/covers/cover.jpg");
+            }
+
+            if (bgTexture is not null)
             {
                 LoadComponentAsync(background = new BufferedContainer
                 {
@@ -868,7 +903,7 @@ namespace PerformanceCalculatorGUI.Screens
                         new Sprite
                         {
                             RelativeSizeAxes = Axes.Both,
-                            Texture = textures.Get($"https://assets.ppy.sh/beatmaps/{working.BeatmapInfo.BeatmapSet.OnlineID}/covers/cover.jpg"),
+                            Texture = bgTexture,
                             Anchor = Anchor.Centre,
                             Origin = Anchor.Centre,
                             FillMode = FillMode.Fill

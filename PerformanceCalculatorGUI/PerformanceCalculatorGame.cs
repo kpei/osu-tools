@@ -4,11 +4,15 @@
 using System;
 using System.Collections.Generic;
 using osu.Framework.Allocation;
+using osu.Framework.Audio;
 using osu.Framework.Bindables;
 using osu.Framework.Configuration;
 using osu.Framework.Graphics;
+using osu.Framework.IO.Stores;
 using osu.Framework.Platform;
 using osu.Game;
+using osu.Game.Beatmaps;
+using osu.Game.Database;
 using osu.Game.Graphics.Cursor;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.Mods;
@@ -53,6 +57,23 @@ namespace PerformanceCalculatorGUI
 
             var notificationDisplay = new NotificationDisplay();
             dependencies.CacheAs(notificationDisplay);
+
+            string directory = apiConfig.GetBindable<string>(Settings.LazerPath).Value;
+            if (directory != string.Empty) {
+                var storage = Host.GetStorage(directory);
+                var realm = new RealmAccess(storage, OsuGameBase.CLIENT_DATABASE_FILENAME, Host.UpdateThread);
+                var reamFileStore = new RealmFileStore(realm, storage);
+                var beatmapManager = new BeatmapManager(storage, realm, null, Audio, Resources, Host);
+                var difficultyCache = new BeatmapDifficultyCache();
+
+                dependencies.CacheAs(difficultyCache);
+                dependencies.CacheAs(beatmapManager);
+                dependencies.CacheAs(storage);
+                dependencies.CacheAs(realm);
+                dependencies.CacheAs(reamFileStore);
+
+                AddInternal(difficultyCache);
+            }
 
             AddRange(new Drawable[]
             {

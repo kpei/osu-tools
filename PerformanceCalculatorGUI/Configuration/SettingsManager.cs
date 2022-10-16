@@ -3,6 +3,7 @@
 
 using System.IO;
 using System.Reflection;
+using osu.Framework;
 using osu.Framework.Configuration;
 using osu.Framework.Platform;
 
@@ -15,6 +16,7 @@ namespace PerformanceCalculatorGUI.Configuration
         DefaultPath,
         CachePath,
         ReworkId,
+        LazerPath,
     }
 
     public class SettingsManager : IniConfigManager<Settings>
@@ -26,6 +28,19 @@ namespace PerformanceCalculatorGUI.Configuration
         {
         }
 
+        protected string GuessLazerStorage() {
+            DesktopGameHost host = Host.GetSuitableDesktopHost("osu", new HostOptions { PortableInstallation = false });
+            foreach (string path in host.UserStoragePaths)
+            {
+                var storage = host.GetStorage(path);
+
+                // if an existing data directory exists for this application, prefer it immediately.
+                if (storage.ExistsDirectory("osu"))
+                    return storage.GetFullPath("osu");
+            }
+            return string.Empty;
+        }
+
         protected override void InitialiseDefaults()
         {
             SetDefault(Settings.ClientId, string.Empty);
@@ -33,6 +48,7 @@ namespace PerformanceCalculatorGUI.Configuration
             SetDefault(Settings.DefaultPath, Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location));
             SetDefault(Settings.CachePath, Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "cache"));
             SetDefault(Settings.ReworkId, string.Empty);
+            SetDefault(Settings.LazerPath, GuessLazerStorage());
         }
     }
 }

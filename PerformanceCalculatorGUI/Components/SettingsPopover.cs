@@ -50,7 +50,7 @@ namespace PerformanceCalculatorGUI.Components
         private Bindable<float> scaleBindable;
         private Bindable<string> reworkIdBindable;
         private Bindable<ReworkDropdownSelect> reworkBindable;
-
+        private Bindable<string> lazerPathBindable;
 
         private const string api_key_link = "https://osu.ppy.sh/home/account/edit#new-oauth-application";
 
@@ -64,6 +64,7 @@ namespace PerformanceCalculatorGUI.Components
             cacheBindable = configManager.GetBindable<string>(Settings.CachePath);
             scaleBindable = osuConfig.GetBindable<float>(OsuSetting.UIScale);
             reworkIdBindable = configManager.GetBindable<string>(Settings.ReworkId);
+            lazerPathBindable = configManager.GetBindable<string>(Settings.LazerPath);
             
             List<APIRework> reworks = await apiManager.GetJsonFromHuismetbenenApi<List<APIRework>>("/reworks/list");
             ReworkDropdownSelect[] reworkItems = reworks.FindAll((r) => r.Gamemode == ruleset.Value.OnlineID)
@@ -133,6 +134,12 @@ namespace PerformanceCalculatorGUI.Components
                                 RelativeSizeAxes = Axes.X,
                                 Label = "Beatmap cache path",
                                 Current = { BindTarget = cacheBindable }
+                            },
+                            new LabelledTextBox
+                            {
+                                RelativeSizeAxes = Axes.X,
+                                Label = "Lazer Directory",
+                                Current = { BindTarget = lazerPathBindable }
                             },
                             new Box
                             {

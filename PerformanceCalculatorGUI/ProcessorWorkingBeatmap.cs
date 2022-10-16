@@ -37,7 +37,7 @@ namespace PerformanceCalculatorGUI
             this.audioManager = audioManager;
         }
 
-        private ProcessorWorkingBeatmap(Beatmap beatmap, int? beatmapId = null, AudioManager audioManager = null)
+        public ProcessorWorkingBeatmap(Beatmap beatmap, int? beatmapId = null, AudioManager audioManager = null)
             : base(beatmap.BeatmapInfo, audioManager)
         {
             this.beatmap = beatmap;
@@ -49,7 +49,7 @@ namespace PerformanceCalculatorGUI
                 beatmap.BeatmapInfo.OnlineID = beatmapId.Value;
         }
 
-        private static Beatmap readFromFile(string filename)
+        public static Beatmap readFromFile(string filename)
         {
             using (var stream = File.OpenRead(filename))
             using (var reader = new LineBufferedReader(stream))
